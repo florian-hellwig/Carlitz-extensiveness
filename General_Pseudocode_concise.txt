@@ -1,0 +1,249 @@
+ALGORITHM IsCarlitzExtensiveBest(
+    q, n, method,
+    randomized_evaluate = False,
+    randomized_trials = 128,
+    cache_primitive_candidates = True
+)
+
+INPUT:
+    q                          = size of the base field
+    n                          = extension degree
+    method ∈ {"evaluate", "kernel"}
+    randomized_evaluate ∈ {True, False}
+    randomized_trials          = number of random primitive projective points
+                                 to test before deterministic fallback
+    cache_primitive_candidates = whether to materialise the list of primitive
+                                 projective-point representatives once and reuse
+                                 it across all z, instead of regenerating it lazily
+
+PRECONDITIONS:
+    method ∈ {"evaluate", "kernel"}
+    If randomized_evaluate = True, then method = "evaluate"
+        (randomisation is only available for the evaluate method)
+
+OUTPUT:
+    True if F_(q^n) / F_q is Carlitz-extensive
+    False otherwise
+
+CONVENTION:
+    All matrices act on row vectors from the right (row-action convention).
+    The "kernel" of a matrix H always refers to the left null space
+        ker(H) := { v : v · H = 0 }
+    which in code is computed as right_kernel(H^T).
+
+--------------------------------------------------
+1. Construct the fields
+--------------------------------------------------
+Construct the finite field F_q
+Construct the extension field F_(q^n) of degree n over F_q
+
+--------------------------------------------------
+2. Prepare linear algebra over F_q
+--------------------------------------------------
+View F_(q^n) as an n-dimensional vector space over F_q
+
+Construct:
+    – a basis of F_(q^n) over F_q
+    – a map to_V : F_(q^n) -> F_q^n
+    – a map from_V : F_q^n -> F_(q^n)
+    – the zero vector in F_q^n
+
+--------------------------------------------------
+3. Prepare the primitive projective-point representatives
+--------------------------------------------------
+If cache_primitive_candidates = True or randomized_evaluate = True:
+    Materialise the full list of primitive projective-point representatives
+    by calling PrimitivePointPairList(F_q, F_(q^n), to_V)
+Else:
+    Use the lazy iterator PrimitivePointPairIter(F_q, F_(q^n), to_V)
+    (regenerated for each z)
+
+In either case the source produces triples
+    (k, x_rep, to_V(x_rep))
+where x_rep = g^k with 1 ≤ k < Q := (q^n − 1)/(q − 1) and gcd(k, Q) = 1,
+g is a multiplicative generator of F_(q^n)^*, and one representative is
+emitted per primitive F_q-projective point.
+
+Justification:
+    Tau-generatorhood is invariant under multiplication by elements of F_q^*,
+    so we test only one representative per projective point.
+
+--------------------------------------------------
+4. Treat z = 0 separately
+--------------------------------------------------
+Set z = 0
+Set orbit_z = [0]
+
+Call FindPrimitiveTauGeneratorForZ(
+    z, orbit_z, method,
+    randomized_evaluate, randomized_trials, ...
+)
+
+If no primitive tau-generator is found:
+    return False
+
+Store the resulting witness for z = 0
+
+--------------------------------------------------
+5. Treat all nonzero z using Frobenius orbits
+--------------------------------------------------
+Partition the nonzero elements of F_(q^n) into q-cyclotomic cosets
+of exponents modulo N := q^n − 1
+
+For each coset:
+    choose one representative exponent e
+    define z_rep = g^e
+
+    Compute the Frobenius orbit of z_rep:
+        orbit_z = [z_rep, z_rep^q, z_rep^(q^2), ...]
+
+    Call FindPrimitiveTauGeneratorForZ(
+        z_rep, orbit_z, method,
+        randomized_evaluate, randomized_trials, ...
+    )
+
+    If no primitive tau-generator is found:
+        return False
+
+    Otherwise, transport the witness along the orbit:
+        if z_j = z_rep^(q^j), then x_j = x_witness^(q^j)
+    Store these witnesses for all elements in the orbit
+
+--------------------------------------------------
+6. Final decision
+--------------------------------------------------
+If every case succeeds:
+    return True
+Else:
+    return False
+
+
+
+
+SUBROUTINE FindPrimitiveTauGeneratorForZ(
+    z, orbit_z, method,
+    randomized_evaluate = False,
+    randomized_trials = 128,
+    ...
+)
+
+INPUT:
+    z        ∈ F_(q^n)
+    orbit_z  = q-Frobenius orbit of z
+    method   ∈ {"evaluate", "kernel"}
+
+OUTPUT:
+    a primitive tau-generator for gamma_z if one exists
+    otherwise None
+
+--------------------------------------------------
+1. Compute the minimal polynomial of z
+--------------------------------------------------
+From the Frobenius orbit orbit_z, compute the minimal polynomial
+    f_z ∈ F_q[t]
+
+Let
+    d = degree(f_z) = |orbit_z|
+
+--------------------------------------------------
+2. Compute the polynomial m_gamma using the p-part shortcut
+--------------------------------------------------
+Let p = char(F_q)
+Write n/d = p^r · s with gcd(s, p) = 1
+
+By Hsu–Nan (2011), the minimal polynomial of gamma_z is
+    m_gamma = f_z^(n/d) − 1
+and over a field of characteristic p,
+    f_z^(n/d) − 1 = (f_z^s − 1)^(p^r)
+
+Therefore:
+    – Factor the smaller polynomial
+            reduced = f_z^s − 1
+      into irreducible factors over F_q:
+            reduced = ∏ p_i^{a_i}
+    – Recover the factorisation of m_gamma by raising every multiplicity:
+            m_gamma = ∏ p_i^{a_i · p^r}
+
+For each distinct irreducible factor p_i of m_gamma:
+    define
+        g_i = m_gamma / p_i
+
+--------------------------------------------------
+3. Build the linear map gamma_z
+--------------------------------------------------
+Define the F_q-linear map
+    gamma_z(y) = z·y + y^q
+
+Compute its matrix A with respect to the chosen F_q-basis,
+using row-action convention:
+    to_V(x) · A = to_V(gamma_z(x))
+
+--------------------------------------------------
+4. Build the test matrices
+--------------------------------------------------
+For each quotient polynomial g_i:
+    compute
+        H_i = g_i(A)
+    by Horner's rule on A
+
+--------------------------------------------------
+5. Test primitive projective-point representatives
+--------------------------------------------------
+If method = "evaluate" and randomized_evaluate = False:
+    For each stored representative x_rep:
+        let v = to_V(x_rep)
+        check whether
+            v · H_i ≠ 0    for all i
+        If yes:
+            replace x_rep by a scalar multiple on the same
+            F_q-projective point that is actually primitive in F_(q^n)^*
+            return that primitive element
+
+If method = "evaluate" and randomized_evaluate = True:
+    Phase 1: randomised presearch
+        Choose up to randomized_trials stored representatives uniformly
+        at random without repetition
+
+        For each sampled representative x_rep:
+            let v = to_V(x_rep)
+            check whether
+                v · H_i ≠ 0    for all i
+            If yes:
+                replace x_rep by a scalar multiple on the same
+                F_q-projective point that is actually primitive in F_(q^n)^*
+                return that primitive element
+
+    Phase 2: deterministic fallback
+        For each remaining untested representative x_rep:
+            let v = to_V(x_rep)
+            check whether
+                v · H_i ≠ 0    for all i
+            If yes:
+                replace x_rep by a scalar multiple on the same
+                F_q-projective point that is actually primitive in F_(q^n)^*
+                return that primitive element
+
+    Interpretation:
+        This is a Las Vegas strategy:
+        randomness may speed up the search, but if the random phase fails,
+        the algorithm still performs the full deterministic scan.
+        Hence correctness is unchanged.
+
+If method = "kernel":
+    For each H_i:
+        compute the left null space
+            ker(H_i) = { v : v · H_i = 0 }
+
+    For each stored representative x_rep:
+        let v = to_V(x_rep)
+        check whether
+            v ∉ ker(H_i)   for all i
+        If yes:
+            replace x_rep by a scalar multiple on the same
+            F_q-projective point that is actually primitive in F_(q^n)^*
+            return that primitive element
+
+--------------------------------------------------
+6. If no candidate works
+--------------------------------------------------
+return None
