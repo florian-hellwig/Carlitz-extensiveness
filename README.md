@@ -2,7 +2,7 @@
 
 Resolving the remaining cases of Carlitz-extensiveness over finite fields using SageMath.
 
-This repository accompanies the talk *Resolving the Remaining Cases of Carlitz-Extensiveness over Finite Fields using SageMath* (F. Hellwig and M. Schaller), to be presented at **ACA 2026** (Prishtina, 1–5 June 2026).
+This repository accompanies the talk *Resolving the Remaining Cases of Carlitz-Extensiveness over Finite Fields using SageMath* (F. Hellwig and M. Schaller), presented at **ACA 2026** (Prishtina, 1–5 June 2026).
 
 ## Files
 
