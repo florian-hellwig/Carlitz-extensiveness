@@ -52,7 +52,7 @@ NOTE:
 
         It then lazily generates tau-generators of the form
 
-            a(gamma_z)u
+            a(gamma_z)(u)
 
         using the cyclic module basis
 
