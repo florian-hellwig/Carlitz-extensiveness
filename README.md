@@ -8,7 +8,7 @@ This repository accompanies the talk *Resolving the Remaining Cases of Carlitz-E
 
 - **`Abstract_ACA_2026.pdf`** – Conference abstract submitted to ACA 2026, summarising the background, contribution, and method.
 
-- **`ACA_Presentation.pdf`** – Slides of the ACA 2026 presentation. These slides give a more detailed and accessible overview of the mathematical background, the computational strategy, and the final verification of the remaining cases. Readers looking for a guided explanation of the repository and the underlying ideas are encouraged to start here.
+- **`ACA_Presentation.pdf`** – Slides of the ACA 2026 presentation. These slides give a more detailed and accessible overview of the historical context, the mathematical background and the computational strategy to solve the remaining cases of Carlitz-extensiveness. Readers looking for a guided explanation of the algorithms and the underlying ideas are encouraged to start here.
 
 - **`Remaining_cases_solved_original_code.ipynb`** – Minimal notebook resolving the remaining cases of Carlitz-extensiveness. It contains only the deterministic approach needed for the final verification; additional benchmarking and auxiliary code have been omitted.
 
