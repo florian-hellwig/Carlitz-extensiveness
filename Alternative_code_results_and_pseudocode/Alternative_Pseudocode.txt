@@ -1,0 +1,460 @@
+ALGORITHM IsCarlitzExtensiveAlternative(
+    q, n, method,
+    search_mode = "exhaustive",
+    randomized_trials = 2000,
+    random_seed = None,
+    cache_projective_points = True,
+    verify_cyclic_basis = True
+)
+
+INPUT:
+    q                       = size of the base field
+    n                       = extension degree
+    method ∈ {"evaluate", "kernel"}
+    search_mode ∈ {"exhaustive", "randomized"}
+    randomized_trials       = number of random monic polynomials sampled in randomized mode
+    random_seed             = seed for the random number generator
+    cache_projective_points = whether to materialise the list of projective
+                              F_q-point representatives once and reuse it
+    verify_cyclic_basis     = whether to verify that the cyclic basis generated
+                              by the first tau-generator has full rank
+
+PRECONDITIONS:
+    method ∈ {"evaluate", "kernel"}
+    search_mode ∈ {"exhaustive", "randomized"}
+
+OUTPUT:
+    True  if F_(q^n) / F_q is proved Carlitz-extensive
+    False if F_(q^n) / F_q is proved not Carlitz-extensive
+          possible only in exhaustive mode
+    None  if randomized search exhausts its trial budget without finding
+          all witnesses
+
+CONVENTION:
+    All matrices act on row vectors from the right.
+
+    The "kernel" of a matrix H refers to the left null space
+
+        ker(H) := { v : v · H = 0 }
+
+    which is computed as right_kernel(H^T).
+
+NOTE:
+    This is an alternative algorithm for the same decision problem.
+    Throughout the algorithm, tau denotes the operator gamma_z.
+    The term tau-generator is used in its classical sense.
+
+    The main difference from the first algorithm is the following:
+        Instead of first filtering for primitive projective points and their field 
+        representatives, and then testing whether these are tau-generators,
+        this algorithm first finds one tau-generator u for gamma_z.
+        This u may be non-primitive as a field element.
+
+        It then lazily generates tau-generators of the form
+
+            a(gamma_z)(u)
+
+        using the cyclic module basis
+
+            u, gamma_z(u), gamma_z^2(u), ..., gamma_z^(n-1)(u),
+
+        where a is a monic polynomial, deg(a) < n, and gcd(a, m_gamma) = 1.
+
+        Multiplicative primitivity is then tested only on these generated
+        tau-generators and their nonzero F_q-scalar multiples.
+
+--------------------------------------------------
+1. Construct the fields
+--------------------------------------------------
+Construct the finite field F_q
+Construct the extension field F_(q^n) of degree n over F_q
+
+--------------------------------------------------
+2. Prepare linear algebra over F_q
+--------------------------------------------------
+View F_(q^n) as an n-dimensional vector space over F_q
+
+Construct:
+    – a basis of F_(q^n) over F_q
+    – a map to_V : F_(q^n) -> F_q^n
+    – a map from_V : F_q^n -> F_(q^n)
+    – the zero vector in F_q^n
+
+--------------------------------------------------
+3. Prepare primitive-element test data
+--------------------------------------------------
+Let
+    N = q^n − 1
+
+Factor N and store its distinct prime divisors.
+
+An element x ∈ F_(q^n)^* is primitive iff
+
+    x^(N / l) ≠ 1
+
+for every prime divisor l of N.
+
+Also store all nonzero scalars of F_q, embedded into F_(q^n).
+
+--------------------------------------------------
+4. Prepare projective F_q-point representatives
+--------------------------------------------------
+Let g be a multiplicative generator of F_(q^n)^*
+Let
+
+    Q = (q^n − 1) / (q − 1)
+
+The elements
+
+    g^0, g^1, ..., g^(Q−1)
+
+form one representative system for the projective F_q-lines in F_(q^n).
+
+If cache_projective_points = True:
+    Materialise the list
+
+        (k, g^k, to_V(g^k))    for k = 0, ..., Q−1
+
+Else:
+    Use a lazy iterator producing the same triples when needed.
+
+These projective representatives are used only to find one tau-generator u.
+They are not required to be primitive as field elements.
+
+--------------------------------------------------
+5. Treat z = 0 separately
+--------------------------------------------------
+Set
+    z = 0
+    orbit_z = [0]
+
+Call FindPrimitiveTauGeneratorForZAlternative(
+    z, orbit_z, method, search_mode, randomized_trials, ...
+)
+
+If no primitive tau-generator is found:
+    If search_mode = "exhaustive":
+        return False
+    If search_mode = "randomized":
+        return None
+
+Store the resulting witness for z = 0.
+
+--------------------------------------------------
+6. Treat all nonzero z using Frobenius orbits
+--------------------------------------------------
+Partition the nonzero elements of F_(q^n) into q-cyclotomic cosets
+of exponents modulo N = q^n − 1.
+
+For each coset:
+    choose one representative exponent e
+    define
+
+        z_rep = g^e
+
+    Compute the q-Frobenius orbit
+
+        orbit_z = [z_rep, z_rep^q, z_rep^(q^2), ...]
+
+    Call FindPrimitiveTauGeneratorForZAlternative(
+        z_rep, orbit_z, method, search_mode, randomized_trials, ...
+    )
+
+    If no primitive tau-generator is found:
+        If search_mode = "exhaustive":
+            return False
+        If search_mode = "randomized":
+            return None
+
+    Otherwise, transport the witness along the Frobenius orbit:
+        if z_j = z_rep^(q^j), then x_j = x_witness^(q^j)
+
+    Store these witnesses for all elements in the orbit.
+
+--------------------------------------------------
+7. Final decision
+--------------------------------------------------
+If all cases succeed:
+    return True
+
+
+
+
+SUBROUTINE FindPrimitiveTauGeneratorForZAlternative(
+    z, orbit_z, method,
+    search_mode = "exhaustive",
+    randomized_trials = 2000,
+    ...
+)
+
+INPUT:
+    z           ∈ F_(q^n)
+    orbit_z     = q-Frobenius orbit of z
+    method      ∈ {"evaluate", "kernel"}
+    search_mode ∈ {"exhaustive", "randomized"}
+
+OUTPUT:
+    a primitive tau-generator for gamma_z if one is found
+    otherwise None
+
+--------------------------------------------------
+1. Compute the minimal polynomial of z
+--------------------------------------------------
+From the Frobenius orbit orbit_z, compute the minimal polynomial
+
+    f_z ∈ F_q[t]
+
+Let
+
+    d = degree(f_z) = |orbit_z|
+
+--------------------------------------------------
+2. Compute the polynomial m_gamma using the p-part shortcut
+--------------------------------------------------
+Let p = char(F_q)
+Write
+
+    n / d = p^r · s
+
+with gcd(s, p) = 1.
+
+By Hsu–Nan, the minimal polynomial of gamma_z is
+
+    m_gamma = f_z^(n/d) − 1
+
+and in characteristic p,
+
+    f_z^(n/d) − 1 = (f_z^s − 1)^(p^r).
+
+Therefore:
+    – Factor the smaller polynomial
+
+            reduced = f_z^s − 1
+
+      into irreducible factors over F_q:
+
+            reduced = ∏ p_i^{a_i}
+
+    – Recover the factorisation of m_gamma by multiplying all
+      multiplicities by p^r:
+
+            m_gamma = ∏ p_i^{a_i · p^r}
+
+For each distinct irreducible factor p_i of m_gamma, define
+
+    g_i = m_gamma / p_i
+
+--------------------------------------------------
+3. Build the linear map gamma_z
+--------------------------------------------------
+Define the F_q-linear map
+
+    gamma_z(y) = z·y + y^q
+
+Compute its matrix A with respect to the chosen F_q-basis,
+using row-action convention:
+
+    to_V(x) · A = to_V(gamma_z(x))
+
+--------------------------------------------------
+4. Build the tau-generator test matrices
+--------------------------------------------------
+For each quotient polynomial g_i, compute
+
+    H_i = g_i(A)
+
+by Horner's rule.
+
+Then x is a tau-generator for gamma_z iff
+
+    to_V(x) · H_i ≠ 0
+
+for every i.
+
+--------------------------------------------------
+5. Find one tau-generator u
+--------------------------------------------------
+If method = "evaluate":
+    For each projective representative x_rep:
+        let v = to_V(x_rep)
+
+        If
+
+            v · H_i ≠ 0    for all i
+
+        then:
+            set u = x_rep
+            stop the search
+
+If method = "kernel":
+    For each H_i:
+        compute the left null space
+
+            ker(H_i) = { v : v · H_i = 0 }
+
+    For each projective representative x_rep:
+        let v = to_V(x_rep)
+
+        If
+
+            v ∉ ker(H_i)    for all i
+
+        then:
+            set u = x_rep
+            stop the search
+
+If no tau-generator u is found:
+    return None
+
+--------------------------------------------------
+6. Build cyclic module coordinates from u
+--------------------------------------------------
+Construct the cyclic basis
+
+    u, gamma_z(u), gamma_z^2(u), ..., gamma_z^(n-1)(u)
+
+In row-action convention this corresponds to the rows
+
+    u_vec,
+    u_vec · A,
+    u_vec · A^2,
+    ...,
+    u_vec · A^(n−1)
+
+where u_vec = to_V(u).
+
+Let U be the matrix whose rows are these vectors.
+
+If verify_cyclic_basis = True:
+    Check that rank(U) = n.
+    If not, raise an error.
+
+This basis identifies coefficient vectors of polynomials a(t)
+with elements of the cyclic F_q[t]-module generated by u.
+
+--------------------------------------------------
+7. Generate tau-generators from the cyclic vector
+--------------------------------------------------
+Every tau-generator in the cyclic module generated by u is represented,
+up to F_q^*-scaling, by
+
+    a(gamma_z)u
+
+where:
+    – a ∈ F_q[t]
+    – a is monic
+    – deg(a) < n
+    – gcd(a, m_gamma) = 1
+
+The coefficient vector
+
+    [a_0, a_1, ..., a_(n−1)]
+
+is converted to the field element
+
+    x = a(gamma_z)u
+
+by multiplying the coefficient vector with the cyclic basis matrix U.
+
+--------------------------------------------------
+8A. Exhaustive search mode
+--------------------------------------------------
+If search_mode = "exhaustive":
+
+    For every monic polynomial a ∈ F_q[t] with deg(a) < n:
+        If gcd(a, m_gamma) = 1:
+
+            Compute
+
+                x = a(gamma_z)u
+
+            For every nonzero scalar lambda ∈ F_q^*:
+                set
+
+                    y = lambda · x
+
+                Test whether y is primitive in F_(q^n)^*.
+
+                If y is primitive:
+                    return y
+
+    If the loop finishes without finding a primitive element:
+        return None
+
+Interpretation:
+    In exhaustive mode, returning None proves that no primitive
+    tau-generator exists for this z.
+
+--------------------------------------------------
+8B. Randomized search mode
+--------------------------------------------------
+If search_mode = "randomized":
+
+    Repeat up to randomized_trials times:
+        Randomly choose a degree d ∈ {0, ..., n−1}
+
+        Randomly choose a monic polynomial a ∈ F_q[t]
+        of degree d.
+
+        If gcd(a, m_gamma) = 1:
+
+            Compute
+
+                x = a(gamma_z)u
+
+            For every nonzero scalar lambda ∈ F_q^*:
+                set
+
+                    y = lambda · x
+
+                Test whether y is primitive in F_(q^n)^*.
+
+                If y is primitive:
+                    return y
+
+    If no primitive element is found within the trial budget:
+        return None
+
+Interpretation:
+    In randomized mode, returning None does not prove nonexistence.
+    It only means that no witness was found within the prescribed
+    trial budget.
+    Note that this corresponds to sampling with replacement, 
+    meaning that polynomials can be tried multiple times.
+
+
+
+SUBROUTINE IsPrimitiveElement(
+    x,
+    primitive_test_data
+)
+
+INPUT:
+    x ∈ F_(q^n)
+
+OUTPUT:
+    True if x is primitive in F_(q^n)^*
+    False otherwise
+
+--------------------------------------------------
+1. Handle zero
+--------------------------------------------------
+If x = 0:
+    return False
+
+--------------------------------------------------
+2. Test against the prime divisors of q^n − 1
+--------------------------------------------------
+Let
+
+    N = q^n − 1
+
+For every prime divisor l of N:
+    If
+
+        x^(N/l) = 1
+
+    then:
+        return False
+
+return True

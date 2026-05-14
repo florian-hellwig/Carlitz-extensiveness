@@ -1,8 +1,0 @@
-q,n,label,method,status,ok,seconds
-2,18,2^18,evaluate_deterministic,True,True,118.19457
-2,20,2^20,evaluate_deterministic,True,True,551.409839
-2,24,2^24,evaluate_deterministic,True,True,9261.467831
-3,12,3^12,evaluate_deterministic,True,True,284.710923
-4,10,4^10,evaluate_deterministic,True,True,1515.719882
-4,12,4^12,evaluate_deterministic,True,True,25066.391798
-8,8,8^8,evaluate_deterministic,True,True,27833.291681
