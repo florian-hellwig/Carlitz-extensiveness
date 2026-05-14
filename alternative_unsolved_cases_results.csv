@@ -1,8 +1,0 @@
-q,n,label,method,status,ok,seconds
-2,18,2^18,evaluate_exhaustive,True,True,160.13532902894076
-2,20,2^20,evaluate_exhaustive,True,True,723.4848316829884
-2,24,2^24,evaluate_exhaustive,True,True,12272.865680478979
-3,12,3^12,evaluate_exhaustive,True,True,301.81375390209723
-4,10,4^10,evaluate_exhaustive,True,True,1662.3842486849753
-4,12,4^12,evaluate_exhaustive,True,True,29095.351289074053
-8,8,8^8,evaluate_exhaustive,True,True,31538.595381313935
